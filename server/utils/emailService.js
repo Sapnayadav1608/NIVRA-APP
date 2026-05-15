@@ -1,13 +1,14 @@
 // Simple console-based email service for development
 const sendPasswordResetEmail = async (email, resetToken) => {
-  const resetUrl = `${process.env.CLIENT_URL}/reset-password/${resetToken}`;
+  const resetUrl = `http://localhost:3002/reset-password/${resetToken}`;
   
-  console.log('\n=== PASSWORD RESET EMAIL ===');
-  console.log(`To: ${email}`);
-  console.log(`Reset URL: ${resetUrl}`);
-  console.log('============================\n');
+  console.log('\n🔐 PASSWORD RESET REQUEST');
+  console.log(`📧 Email: ${email}`);
+  console.log(`🔗 Reset Link: ${resetUrl}`);
+  console.log('⏰ Valid for 10 minutes');
+  console.log('================================\n');
   
-  return true;
+  return { success: true, resetUrl };
 };
 
 module.exports = {

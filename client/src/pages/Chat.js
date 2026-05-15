@@ -13,7 +13,7 @@ import {
   CircularProgress,
   Fab,
 } from '@mui/material';
-import NivraLogo from '../components/NivraLogo';
+import NivraLogo from '../components/NivraLogo.jsx';
 import {
   Send,
   Mic,

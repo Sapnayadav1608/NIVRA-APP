@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useSelector } from 'react-redux';
+import { useSelector, useDispatch } from 'react-redux';
 import NivraLogo from '../components/NivraLogo.jsx';
 import { useNotifications } from '../hooks/useNotifications';
 import { useRealtimeAlerts } from '../hooks/useRealtimeAlerts';
@@ -7,9 +7,15 @@ import BiometricAuth from '../components/BiometricAuth';
 import CommunityNetwork from '../components/CommunityNetwork';
 import PushNotifications from '../components/PushNotifications';
 import AdminDashboard from './AdminDashboard';
+import ThemeSelector from '../components/ThemeSelector';
+import { getTheme } from '../utils/theme';
+import { professionalTheme } from '../theme/professionalTheme';
 
 const Dashboard = () => {
+  const dispatch = useDispatch();
   const { user } = useSelector((state) => state.auth);
+  const currentTheme = useSelector((state) => state.theme?.mode || 'light');
+  const themeConfig = getTheme(currentTheme);
   const { notification, sendNotification, clearNotification } = useNotifications();
   const { alerts: realtimeAlerts, isConnected, sendAlert, updateLocation } = useRealtimeAlerts(user?.id);
   const [showProfile, setShowProfile] = useState(false);
@@ -45,7 +51,7 @@ const Dashboard = () => {
     };
   });
   const [chatMessages, setChatMessages] = useState([
-    { sender: 'bot', text: 'Hi! I\'m your AI safety assistant. Ask me about emergency procedures, safety tips, or anything related to women\'s safety.' }
+    { sender: 'bot', text: 'Hi! I am your AI safety assistant. Ask me about emergency procedures, safety tips, or anything related to women safety.' }
   ]);
   const [chatInput, setChatInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
@@ -55,6 +61,7 @@ const Dashboard = () => {
   const [showNotifications, setShowNotifications] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [isLoading, setIsLoading] = useState(true);
   
   // Get updated user data from localStorage
   const getCurrentUser = () => {
@@ -236,15 +243,31 @@ const Dashboard = () => {
     window.addEventListener('keydown', handleKeyPress);
     console.log('⌨️ Keyboard SOS active: Press SPACE 3 times quickly');
 
-    // Get real location using OpenStreetMap
-    const getCurrentLocation = () => {
+    // Force location permission first
+    const requestLocationPermission = async () => {
+      try {
+        await navigator.permissions.query({name: 'geolocation'});
+      } catch (e) {}
+    };
+    requestLocationPermission();
+
+    // Get current location using OSM
+    const getCurrentLocation = async () => {
+      console.log('🗺️ Getting FRESH location via OSM...');
+      
+      // Clear any cached location first
+      setLocation(null);
+      setAddress('🔄 Getting fresh GPS location...');
+      
       if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(
           async (position) => {
-            const { latitude, longitude } = position.coords;
+            const { latitude, longitude, accuracy } = position.coords;
+            console.log(`📍 LIVE GPS: ${latitude}, ${longitude} (±${accuracy}m)`);
+            
             setLocation({ lat: latitude, lng: longitude });
             
-            // Reverse geocoding using OpenStreetMap Nominatim API
+            // Use OSM Nominatim for reverse geocoding
             try {
               const response = await fetch(
                 `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=18&addressdetails=1`
@@ -252,12 +275,13 @@ const Dashboard = () => {
               const data = await response.json();
               
               if (data.display_name) {
+                console.log('🏠 OSM Address:', data.display_name);
                 setAddress(data.display_name);
               } else {
                 setAddress(`${latitude.toFixed(6)}, ${longitude.toFixed(6)}`);
               }
             } catch (error) {
-              console.error('Geocoding error:', error);
+              console.error('OSM failed:', error);
               setAddress(`${latitude.toFixed(6)}, ${longitude.toFixed(6)}`);
             }
             
@@ -292,10 +316,26 @@ const Dashboard = () => {
             setLastUpdated(new Date());
           },
           (error) => {
-            console.error('Location error:', error);
-            setAddress('Location access denied');
+            console.error('Location error:', error.message);
+            if (error.code === 1) {
+              setAddress('❌ Location access denied - Please allow GPS in browser settings');
+              alert('📍 Location Access Required\n\nPlease allow location access for accurate emergency services.\n\n1. Click location icon in address bar\n2. Select "Allow"\n3. Refresh page');
+            } else if (error.code === 2) {
+              setAddress('❌ Location unavailable - Check GPS/WiFi');
+            } else {
+              setAddress('❌ Location timeout - Trying again...');
+              setTimeout(getCurrentLocation, 5000);
+            }
           },
-          { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+          (error) => {
+            console.error('GPS Error:', error.message);
+            setAddress('❌ GPS failed - Use Set button to enter Nalasopara manually');
+          },
+          { 
+            enableHighAccuracy: true, 
+            timeout: 15000, 
+            maximumAge: 0
+          }
         );
       }
     };
@@ -320,31 +360,46 @@ const Dashboard = () => {
         
         recognition.onresult = (event) => {
           const transcript = event.results[event.results.length - 1][0].transcript.toLowerCase();
+          console.log('🎤 Voice detected:', transcript);
           
           const panicWords = ['help', 'help me', 'save me', 'emergency', 'sos', 'bachao', 'madad', 'danger', 'attack', 'police'];
           
           if (panicWords.some(word => transcript.includes(word))) {
             console.log('🚨 PANIC VOICE DETECTED:', transcript);
             recognition.stop();
-            sendAutomaticEmergencyAlert('panic_voice');
+            
+            // Immediate vibration
+            if (navigator.vibrate) {
+              navigator.vibrate([500, 200, 500, 200, 500]);
+            }
+            
+            // Call sendEmergencyAlert instead of sendAutomaticEmergencyAlert
+            sendEmergencyAlert('voice_panic');
           }
         };
         
-        recognition.onerror = () => {
-          setTimeout(startMLVoiceDetection, 2000);
+        recognition.onerror = (error) => {
+          console.log('Voice recognition error:', error.error);
+          setIsListening(false);
+          if (error.error !== 'aborted') {
+            setTimeout(startMLVoiceDetection, 5000);
+          }
         };
         
         recognition.onend = () => {
           setIsListening(false);
-          setTimeout(startMLVoiceDetection, 1000);
+          setTimeout(startMLVoiceDetection, 3000);
         };
         
         recognition.start();
       }
     };
 
-    // Start voice detection immediately
-    startMLVoiceDetection();
+    // Start voice detection with delay
+    const voiceTimeout = setTimeout(startMLVoiceDetection, 2000);
+    
+    // Set loading complete after essential setup
+    setTimeout(() => setIsLoading(false), 500);
 
     // Real-time clock
     const timeInterval = setInterval(() => {
@@ -353,6 +408,7 @@ const Dashboard = () => {
 
     return () => {
       clearInterval(timeInterval);
+      clearTimeout(voiceTimeout);
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
       window.removeEventListener('devicemotion', handleDeviceMotion);
@@ -365,12 +421,12 @@ const Dashboard = () => {
   }, []);
 
   const theme = {
-    bg: isDark ? '#000' : '#fff',
-    cardBg: isDark ? '#1c1c1e' : '#fff',
-    text: isDark ? '#fff' : '#000',
-    subtext: isDark ? '#8e8e93' : '#666',
-    border: isDark ? '#38383a' : '#f0f0f0',
-    gradient: isDark ? 'linear-gradient(135deg, #1c1c1e 0%, #2c2c2e 100%)' : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
+    bg: professionalTheme.colors.primaryBg,
+    cardBg: professionalTheme.colors.secondaryBg,
+    text: professionalTheme.colors.primaryText,
+    subtext: professionalTheme.colors.secondaryText,
+    border: professionalTheme.colors.border,
+    gradient: professionalTheme.gradients.primary
   };
 
   const handleProfileUpdate = () => {
@@ -442,7 +498,7 @@ const Dashboard = () => {
       // SMS to emergency contacts only
       if (contacts.length > 0) {
         if (isOnline) {
-          const response = await fetch('http://localhost:5000/api/emergency/send-sms', {
+          const response = await fetch('http://localhost:3001/api/emergency/send-sms', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -626,7 +682,7 @@ const Dashboard = () => {
       
       // Send SMS alerts via backend
       if (isOnline) {
-        await fetch('http://localhost:5000/api/emergency/send-sms', {
+        await fetch('http://localhost:3001/api/emergency/send-sms', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -721,7 +777,7 @@ const Dashboard = () => {
     
     // Send to all contacts via backend API
     try {
-      const response = await fetch('http://localhost:5000/api/emergency/send-sms', {
+      const response = await fetch('http://localhost:3001/api/emergency/send-sms', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -827,7 +883,13 @@ const Dashboard = () => {
       let botResponse = '';
       const input = currentInput.toLowerCase();
       
-      if (input.includes('emergency') || input.includes('sos') || input.includes('help') || input.includes('bachao')) {
+      if (input.includes('thank') || input.includes('thanks') || input.includes('thx')) {
+        botResponse = '😊 You\'re welcome! I\'m always here to help keep you safe. Stay protected with NIVRA!';
+      } else if (input.includes('ok') || input.includes('okay') || input.includes('got it') || input.includes('understood')) {
+        botResponse = '👍 Great! Remember, I\'m here 24/7 for any safety questions or concerns. Your safety is my priority!';
+      } else if (input.includes('bye') || input.includes('goodbye') || input.includes('see you')) {
+        botResponse = '👋 Take care and stay safe! Remember to keep NIVRA\'s emergency features active. See you soon!';
+      } else if (input.includes('emergency') || input.includes('sos') || input.includes('help') || input.includes('bachao')) {
         botResponse = '🚨 EMERGENCY: Shake phone 3 times OR press SOS button OR say "help". All emergency contacts will be called automatically with your location!';
       } else if (input.includes('safety') || input.includes('tips') || input.includes('safe')) {
         botResponse = '🛡️ Safety Tips: Share location with trusted contacts, avoid isolated areas at night, trust your instincts, keep phone charged, stay alert in crowded places!';
@@ -870,7 +932,7 @@ const Dashboard = () => {
       if (offlineAlerts.length > 0) {
         offlineAlerts.forEach(async (alert) => {
           try {
-            await fetch('http://localhost:5000/api/emergency/alert', {
+            await fetch('http://localhost:3001/api/emergency/alert', {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
@@ -1027,13 +1089,70 @@ const Dashboard = () => {
               <h3 style={{ color: theme.text, marginBottom: '15px', display: 'flex', alignItems: 'center' }}>
                 📍 Current Location
               </h3>
-              <p style={{ color: theme.text, marginBottom: '5px' }}><strong>{currentUser?.fullName?.split(' ')[0] || 'User'} is here</strong> 📍</p>
-              <p style={{ color: theme.subtext, fontSize: '14px' }}>{address}</p>
-              {location && (
-                <p style={{ color: theme.subtext, fontSize: '12px', marginTop: '8px' }}>
-                  📍 Lat: {location.lat.toFixed(6)}, Lng: {location.lng.toFixed(6)}
+              <div style={{
+                background: location ? '#e8f5e8' : '#fff3e0',
+                border: `2px solid ${location ? '#4caf50' : '#ff9800'}`,
+                borderRadius: '12px',
+                padding: '15px',
+                marginBottom: '10px'
+              }}>
+                <p style={{ color: '#333', marginBottom: '8px', fontWeight: 'bold' }}>
+                  📍 {profileData?.fullName?.split(' ')[0] || currentUser?.fullName?.split(' ')[0] || 'User'} is here
                 </p>
-              )}
+                <p style={{ color: '#666', fontSize: '14px', marginBottom: '8px' }}>{address}</p>
+                {location ? (
+                  <>
+                    <p style={{ color: '#666', fontSize: '12px', marginBottom: '5px' }}>
+                      🌐 Coordinates: {location.lat.toFixed(4)}, {location.lng.toFixed(4)}
+                    </p>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <p style={{ color: '#4caf50', fontSize: '12px', fontWeight: 'bold', margin: 0 }}>
+                        ✅ Location Active • Updated {Math.floor((new Date() - lastUpdated) / 1000)}s ago
+                      </p>
+                      <button
+                        onClick={() => {
+                          setAddress('🔄 Getting fresh location...');
+                          if (navigator.geolocation) {
+                            navigator.geolocation.getCurrentPosition(
+                              async (position) => {
+                                const { latitude, longitude } = position.coords;
+                                setLocation({ lat: latitude, lng: longitude });
+                                try {
+                                  const response = await fetch(
+                                    `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=18&addressdetails=1`
+                                  );
+                                  const data = await response.json();
+                                  setAddress(data.display_name || `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`);
+                                } catch (error) {
+                                  setAddress(`${latitude.toFixed(6)}, ${longitude.toFixed(6)}`);
+                                }
+                                setLastUpdated(new Date());
+                              },
+                              () => setAddress('❌ Location refresh failed'),
+                              { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+                            );
+                          }
+                        }}
+                        style={{
+                          background: '#667eea',
+                          color: 'white',
+                          border: 'none',
+                          padding: '4px 8px',
+                          borderRadius: '6px',
+                          fontSize: '10px',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        🔄 Refresh
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <p style={{ color: '#ff9800', fontSize: '12px', fontWeight: 'bold' }}>
+                    🔄 Getting location... Please allow GPS access
+                  </p>
+                )}
+              </div>
             </div>
 
             {/* Signals */}
@@ -1163,14 +1282,15 @@ const Dashboard = () => {
             {/* Contact List */}
             {contacts.map((contact) => (
               <div key={contact.id} style={{
-                background: theme.cardBg,
-                border: `1px solid ${theme.border}`,
-                borderRadius: '15px',
-                padding: '15px',
-                marginBottom: '15px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between'
+                    background: '#1E293B',
+                    border: `1px solid #334155`,
+                    borderRadius: '12px',
+                    padding: '15px',
+                    marginBottom: '15px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    fontFamily: 'Inter, sans-serif'
               }}>
                 <div>
                   <div style={{ color: theme.text, fontWeight: '600', fontSize: '16px' }}>{contact.name}</div>
@@ -1181,13 +1301,14 @@ const Dashboard = () => {
                   <button
                     onClick={() => window.open(`tel:${contact.phone}`)}
                     style={{
-                      background: '#34c759',
+                      background: '#16A34A',
                       color: 'white',
                       border: 'none',
                       borderRadius: '8px',
                       padding: '8px',
                       cursor: 'pointer',
-                      fontSize: '16px'
+                      fontSize: '16px',
+                      fontFamily: 'Inter, sans-serif'
                     }}
                   >
                     📞
@@ -1195,13 +1316,14 @@ const Dashboard = () => {
                   <button
                     onClick={() => deleteContact(contact.id)}
                     style={{
-                      background: '#ff3b30',
+                      background: '#DC2626',
                       color: 'white',
                       border: 'none',
                       borderRadius: '8px',
                       padding: '8px',
                       cursor: 'pointer',
-                      fontSize: '16px'
+                      fontSize: '16px',
+                      fontFamily: 'Inter, sans-serif'
                     }}
                   >
                     🗑️
@@ -1327,7 +1449,7 @@ const Dashboard = () => {
                 disabled={contacts.length >= 5}
                 style={{
                   width: '100%',
-                  background: contacts.length >= 5 ? '#8e8e93' : '#ff6b9d',
+                  background: contacts.length >= 5 ? '#64748B' : '#6366F1',
                   color: 'white',
                   border: 'none',
                   padding: '15px',
@@ -1727,16 +1849,16 @@ const Dashboard = () => {
                       if (window.confirm('🔓 Disable biometric lock?\n\nApp will no longer require biometric authentication on startup.')) {
                         localStorage.setItem('nivra_biometric_enabled', 'false');
                         alert('🔓 Biometric lock disabled successfully!');
-                        window.location.reload(); // Refresh to update UI
+                        window.location.reload();
                       }
                     } else {
                       localStorage.setItem('nivra_biometric_enabled', 'true');
                       alert('🔐 Biometric lock enabled!\n\nApp will require authentication on next startup.');
-                      window.location.reload(); // Refresh to update UI
+                      window.location.reload();
                     }
                   }}
                   style={{
-                    background: localStorage.getItem('nivra_biometric_enabled') === 'true' ? '#34c759' : '#8e8e93',
+                    background: localStorage.getItem('nivra_biometric_enabled') === 'true' ? '#16A34A' : '#64748B',
                     color: 'white',
                     border: 'none',
                     borderRadius: '15px',
@@ -1786,30 +1908,14 @@ const Dashboard = () => {
             }}>
               <h3 style={{ color: theme.text, marginBottom: '15px' }}>⚙️ App Settings</h3>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-                <span style={{ color: theme.text }}>🌙 Dark Mode</span>
-                <button 
-                  onClick={() => setIsDark(!isDark)}
-                  style={{
-                    background: isDark ? '#34c759' : '#8e8e93',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '15px',
-                    padding: '6px 12px',
-                    fontSize: '12px'
-                  }}
-                >
-                  {isDark ? 'ON' : 'OFF'}
-                </button>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
                 <span style={{ color: theme.text }}>📳 Shake Detection</span>
-                <span style={{ color: '#34c759', fontSize: '12px', fontWeight: '500' }}>
+                <span style={{ color: '#16A34A', fontSize: '12px', fontWeight: '500' }}>
                   ALWAYS ON
                 </span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-                <span style={{ color: theme.text }}>🧠 ML Panic Detection</span>
-                <span style={{ color: isListening ? '#34c759' : '#ff9500', fontSize: '12px' }}>
+                <span style={{ color: theme.text }}>🎤 Voice Detection</span>
+                <span style={{ color: isListening ? '#16A34A' : '#F59E0B', fontSize: '12px' }}>
                   {isListening ? 'ANALYZING' : 'STARTING'}
                 </span>
               </div>
@@ -1822,7 +1928,7 @@ const Dashboard = () => {
                       .catch(() => alert('❌ Please allow microphone access in browser settings'));
                   }}
                   style={{
-                    background: '#667eea',
+                    background: '#6366F1',
                     color: 'white',
                     border: 'none',
                     borderRadius: '15px',
@@ -1844,7 +1950,7 @@ const Dashboard = () => {
                     );
                   }}
                   style={{
-                    background: '#667eea',
+                    background: '#6366F1',
                     color: 'white',
                     border: 'none',
                     borderRadius: '15px',
@@ -1919,14 +2025,15 @@ const Dashboard = () => {
                 }}
                 style={{
                   width: '100%',
-                  background: '#ff3b30',
+                  background: '#DC2626',
                   color: 'white',
                   border: 'none',
                   padding: '15px',
                   borderRadius: '12px',
                   fontSize: '16px',
                   fontWeight: '500',
-                  cursor: 'pointer'
+                  cursor: 'pointer',
+                  fontFamily: 'Inter, sans-serif'
                 }}
               >
                 🚺 Logout
@@ -1958,12 +2065,12 @@ const Dashboard = () => {
             {/* Offline Emergency Contacts */}
             {!isOnline && showOfflineContacts && (
               <div style={{
-                background: 'linear-gradient(135deg, #ff3b30 0%, #ff6b6b 100%)',
+                background: 'linear-gradient(135deg, #dc2626 0%, #991b1b 100%)',
                 borderRadius: '15px',
                 padding: '20px',
                 marginBottom: '20px',
                 color: 'white',
-                boxShadow: '0 4px 15px rgba(255, 59, 48, 0.3)'
+                boxShadow: '0 4px 15px rgba(220, 38, 38, 0.3)'
               }}>
                 <h3 style={{ margin: '0 0 15px 0', fontSize: '18px', fontWeight: '600' }}>
                   📵 Network Lost - Emergency Contacts
@@ -2055,10 +2162,10 @@ const Dashboard = () => {
             <div style={{
               background: theme.cardBg,
               border: `1px solid ${theme.border}`,
-              borderRadius: '15px',
-              padding: '15px',
+              borderRadius: '14px',
+              padding: '20px',
               marginBottom: '20px',
-              boxShadow: isDark ? 'none' : '0 4px 15px rgba(0,0,0,0.05)'
+              boxShadow: '0 4px 12px rgba(0,0,0,0.25)'
             }}>
               <h3 style={{ margin: '0 0 15px 0', fontSize: '16px', color: theme.text, fontWeight: '600' }}>
                 📊 Quick Stats
@@ -2097,12 +2204,12 @@ const Dashboard = () => {
 
             {/* Emergency SOS Card */}
             <div style={{
-              background: 'linear-gradient(135deg, #ff416c 0%, #ff4b2b 100%)',
-              borderRadius: '15px',
+              background: themeConfig.gradients.sos,
+              borderRadius: '16px',
               padding: '15px',
               marginBottom: '20px',
               textAlign: 'center',
-              boxShadow: '0 4px 15px rgba(255, 65, 108, 0.3)'
+              boxShadow: '0 8px 25px rgba(220, 38, 38, 0.4)'
             }}>
               <h3 style={{ margin: '0 0 10px 0', color: 'white', fontSize: '16px', fontWeight: '600' }}>
                 🆘 Emergency SOS
@@ -2139,7 +2246,7 @@ const Dashboard = () => {
                       try {
                         console.log('Sending automatic SMS via backend...');
                         
-                        const response = await fetch('http://localhost:5000/api/emergency/send-sms', {
+                        const response = await fetch('http://localhost:3001/api/emergency/send-sms', {
                           method: 'POST',
                           headers: {
                             'Content-Type': 'application/json',
@@ -2241,7 +2348,7 @@ const Dashboard = () => {
                   <button 
                     onClick={() => setShakeEnabled(!shakeEnabled)}
                     style={{
-                      background: shakeEnabled ? '#34c759' : '#8e8e93',
+                      background: shakeEnabled ? '#16A34A' : '#64748B',
                       color: 'white',
                       border: 'none',
                       borderRadius: '15px',
@@ -2254,7 +2361,7 @@ const Dashboard = () => {
                 </div>
                 {(shakeSequence.length > 0 || laptopShakes.length > 0) && (
                   <div style={{
-                    background: (shakeSequence.length >= 2 || laptopShakes.length >= 2) ? '#ff3b30' : '#ff9500',
+                    background: (shakeSequence.length >= 2 || laptopShakes.length >= 2) ? '#DC2626' : '#F59E0B',
                     color: 'white',
                     padding: '10px',
                     borderRadius: '10px',
@@ -2273,7 +2380,7 @@ const Dashboard = () => {
                 
 
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ color: theme.text, fontSize: '14px' }}>🧠 ML Panic Detection</span>
+                  <span style={{ color: theme.text, fontSize: '14px' }}>🎤 Voice Detection</span>
                   <span style={{ color: isListening ? '#34c759' : '#ff9500', fontSize: '12px', fontWeight: '500' }}>
                     {isListening ? 'ANALYZING' : 'STARTING'}
                   </span>
@@ -2288,12 +2395,12 @@ const Dashboard = () => {
                     fontSize: '12px',
                     textAlign: 'center'
                   }}>
-                    🎤 Auto-detecting panic keywords
+                    🎤 Listening for emergency keywords
                   </div>
                 )}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span style={{ color: theme.text, fontSize: '14px' }}>📶 Offline SOS</span>
-                  <span style={{ color: !isOnline ? '#ff3b30' : '#34c759', fontSize: '12px', fontWeight: '500' }}>
+                  <span style={{ color: !isOnline ? '#DC2626' : '#16A34A', fontSize: '12px', fontWeight: '500' }}>
                     {!isOnline ? (offlineAlertSent ? 'SENT' : 'TRIGGERED') : 'READY'}
                   </span>
                 </div>
@@ -2321,7 +2428,7 @@ const Dashboard = () => {
                     key={helpline.number}
                     onClick={() => window.open(`tel:${helpline.number}`)}
                     style={{
-                      background: '#ff3b30',
+                      background: '#DC2626',
                       color: 'white',
                       border: 'none',
                       padding: '8px',
@@ -2329,7 +2436,8 @@ const Dashboard = () => {
                       fontSize: '12px',
                       fontWeight: '500',
                       cursor: 'pointer',
-                      textAlign: 'center'
+                      textAlign: 'center',
+                      fontFamily: 'Inter, sans-serif'
                     }}
                   >
                     {helpline.name}<br/>{helpline.number}
@@ -2344,18 +2452,69 @@ const Dashboard = () => {
     }
   };
 
+  if (isLoading) {
+    return (
+      <div style={{
+        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+      }}>
+        <div style={{ textAlign: 'center', color: 'white' }}>
+          <div style={{ fontSize: '48px', marginBottom: '20px' }}>🛡️</div>
+          <h1 style={{ margin: '0', fontSize: '32px', fontWeight: '700' }}>NIVRA</h1>
+          <p style={{ margin: '10px 0', fontSize: '16px', opacity: 0.9 }}>Loading your safety dashboard...</p>
+          <div style={{
+            width: '40px',
+            height: '40px',
+            border: '3px solid rgba(255,255,255,0.3)',
+            borderTop: '3px solid white',
+            borderRadius: '50%',
+            animation: 'spin 1s linear infinite',
+            margin: '20px auto'
+          }}></div>
+        </div>
+      </div>
+    );
+  }
+
   return (
+    <>
+      <style>
+        {`
+          .logo-hover {
+            transition: all 0.3s ease;
+            filter: drop-shadow(0 0 10px rgba(255, 107, 157, 0.3));
+            cursor: pointer;
+          }
+          .logo-hover:hover {
+            filter: drop-shadow(0 0 20px rgba(255, 107, 157, 0.8)) drop-shadow(0 0 30px rgba(255, 107, 157, 0.6));
+            transform: scale(1.1) rotate(5deg);
+          }
+          .brand-hover {
+            transition: all 0.3s ease;
+            text-shadow: 0 0 10px rgba(99, 102, 241, 0.3);
+            cursor: pointer;
+          }
+          .brand-hover:hover {
+            text-shadow: 0 0 20px rgba(99, 102, 241, 0.8), 0 0 30px rgba(99, 102, 241, 0.6), 0 0 40px rgba(99, 102, 241, 0.4);
+            transform: scale(1.05);
+          }
+        `}
+      </style>
     <div style={{ 
-      background: theme.gradient,
+      background: professionalTheme.gradients.primary,
       minHeight: '100vh',
-      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+      fontFamily: professionalTheme.typography.fontFamily,
       margin: '0',
       padding: '0',
       maxWidth: '414px',
       marginLeft: 'auto',
       marginRight: 'auto',
       position: 'relative',
-      boxShadow: isDark ? 'none' : '0 0 20px rgba(0,0,0,0.1)'
+      boxShadow: professionalTheme.shadows.card
     }}>
       
       {/* Firebase Notification Popup */}
@@ -2395,16 +2554,16 @@ const Dashboard = () => {
       )}
       
       <div style={{
-        background: isDark ? 'rgba(0,0,0,0.9)' : 'rgba(255,255,255,0.9)',
+        background: 'rgba(15,23,42,0.95)',
         backdropFilter: 'blur(20px)',
         padding: '8px 20px 5px 20px',
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
         fontSize: '14px',
-        fontWeight: '600',
-        color: theme.text,
-        borderBottom: `1px solid ${theme.border}`,
+        fontWeight: professionalTheme.typography.weights.semibold,
+        color: professionalTheme.colors.primaryText,
+        borderBottom: `1px solid ${professionalTheme.colors.border}`,
         position: 'fixed',
         top: '0',
         left: '50%',
@@ -2415,7 +2574,7 @@ const Dashboard = () => {
       }}>
         <div>{currentTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}</div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-          <span style={{ color: isOnline ? '#34c759' : '#ff3b30', fontSize: '12px' }}>
+          <span style={{ color: isOnline ? professionalTheme.colors.successGreen : professionalTheme.colors.sosRed, fontSize: '12px' }}>
             {isOnline ? '●' : '●'} {isOnline ? 'Online' : (offlineAlertSent ? 'SOS Sent' : 'Offline')}
           </span>
           {battery && (
@@ -2426,13 +2585,13 @@ const Dashboard = () => {
       </div>
 
       <div style={{
-        background: isDark ? 'rgba(28,28,30,0.95)' : 'rgba(255,255,255,0.95)',
+        background: 'rgba(15,23,42,0.95)',
         backdropFilter: 'blur(20px)',
         padding: '20px',
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
-        borderBottom: `1px solid ${theme.border}`,
+        borderBottom: `1px solid ${professionalTheme.colors.border}`,
         position: 'fixed',
         top: '37px',
         left: '50%',
@@ -2442,28 +2601,23 @@ const Dashboard = () => {
         zIndex: '999'
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <NivraLogo size={40} />
+          <div className="logo-hover" style={{ display: 'inline-block' }}>
+            <NivraLogo size={40} />
+          </div>
           <div>
-            <h1 style={{ margin: '0', color: '#8A2BE2', fontSize: '28px', fontWeight: '700' }}>NIVRA</h1>
-            <p style={{ margin: '2px 0 0 0', color: theme.subtext, fontSize: '14px' }}>
-              Hi, {currentUser?.fullName?.split(' ')[0] || 'User'}! 👋
+            <h1 className="brand-hover" style={{ 
+              margin: '0', 
+              color: professionalTheme.colors.primaryAccent, 
+              fontSize: '28px', 
+              fontWeight: professionalTheme.typography.weights.bold, 
+              fontFamily: professionalTheme.typography.fontFamily
+            }}>NIVRA</h1>
+            <p style={{ margin: '2px 0 0 0', color: professionalTheme.colors.secondaryText, fontSize: '14px' }}>
+              Hi, {profileData?.fullName?.split(' ')[0] || currentUser?.fullName?.split(' ')[0] || 'User'}! 👋
             </p>
           </div>
         </div>
         <div style={{ display: 'flex', gap: '10px' }}>
-          <button 
-            onClick={() => setIsDark(!isDark)}
-            style={{
-              background: theme.cardBg,
-              border: `1px solid ${theme.border}`,
-              borderRadius: '20px',
-              padding: '8px 12px',
-              fontSize: '16px',
-              cursor: 'pointer'
-            }}
-          >
-            {isDark ? '☀️' : '🌙'}
-          </button>
           <div 
             onClick={() => setCurrentPage('profile')}
             style={{
@@ -2484,7 +2638,17 @@ const Dashboard = () => {
               fontSize: '16px',
               fontWeight: '500',
               overflow: 'hidden',
-              flexShrink: 0
+              flexShrink: 0,
+              transition: 'all 0.3s ease',
+              boxShadow: '0 0 0 rgba(99, 102, 241, 0)'
+            }}
+            onMouseEnter={(e) => {
+              e.target.style.boxShadow = '0 0 20px rgba(99, 102, 241, 0.8)';
+              e.target.style.transform = 'scale(1.1)';
+            }}
+            onMouseLeave={(e) => {
+              e.target.style.boxShadow = '0 0 0 rgba(99, 102, 241, 0)';
+              e.target.style.transform = 'scale(1)';
             }}
           >
             {!profileData.profilePicture && '👤'}
@@ -2515,9 +2679,9 @@ const Dashboard = () => {
         transform: 'translateX(-50%)',
         width: '100%',
         maxWidth: '414px',
-        background: isDark ? 'rgba(28,28,30,0.95)' : 'rgba(255,255,255,0.95)',
+        background: 'rgba(15,23,42,0.95)',
         backdropFilter: 'blur(20px)',
-        borderTop: `1px solid ${theme.border}`,
+        borderTop: `1px solid ${professionalTheme.colors.border}`,
         padding: '10px 0 25px 0',
         display: 'flex',
         justifyContent: 'space-around',
@@ -2530,12 +2694,27 @@ const Dashboard = () => {
             setShowNotifications(false);
           }}
           style={{ 
-            background: (currentPage === 'home' && !showCommunity && !showNotifications) ? '#ff6b9d' : 'none', 
+            background: (currentPage === 'home' && !showCommunity && !showNotifications) ? professionalTheme.colors.primaryAccent : 'none', 
             border: 'none', 
             padding: '10px', 
             fontSize: '24px', 
             cursor: 'pointer',
-            borderRadius: '12px'
+            borderRadius: professionalTheme.borderRadius.medium,
+            color: (currentPage === 'home' && !showCommunity && !showNotifications) ? professionalTheme.colors.primaryText : '#64748B',
+            transition: 'all 0.2s ease',
+            boxShadow: (currentPage === 'home' && !showCommunity && !showNotifications) ? professionalTheme.shadows.glow : 'none'
+          }}
+          onMouseEnter={(e) => {
+            if (!(currentPage === 'home' && !showCommunity && !showNotifications)) {
+              e.target.style.color = professionalTheme.colors.primaryAccent;
+              e.target.style.transform = 'scale(1.1)';
+            }
+          }}
+          onMouseLeave={(e) => {
+            if (!(currentPage === 'home' && !showCommunity && !showNotifications)) {
+              e.target.style.color = '#64748B';
+              e.target.style.transform = 'scale(1)';
+            }
           }}
         >🏠</button>
 
@@ -2546,12 +2725,27 @@ const Dashboard = () => {
             setShowNotifications(false);
           }}
           style={{ 
-            background: (currentPage === 'map' && !showCommunity && !showNotifications) ? '#ff6b9d' : 'none', 
+            background: (currentPage === 'map' && !showCommunity && !showNotifications) ? '#6366F1' : 'none', 
             border: 'none', 
             padding: '10px', 
             fontSize: '24px', 
             cursor: 'pointer',
-            borderRadius: '12px'
+            borderRadius: '12px',
+            color: (currentPage === 'map' && !showCommunity && !showNotifications) ? '#F8FAFC' : '#64748B',
+            transition: 'all 0.2s ease',
+            boxShadow: (currentPage === 'map' && !showCommunity && !showNotifications) ? '0 0 15px rgba(99, 102, 241, 0.6)' : 'none'
+          }}
+          onMouseEnter={(e) => {
+            if (!(currentPage === 'map' && !showCommunity && !showNotifications)) {
+              e.target.style.color = '#6366F1';
+              e.target.style.transform = 'scale(1.1)';
+            }
+          }}
+          onMouseLeave={(e) => {
+            if (!(currentPage === 'map' && !showCommunity && !showNotifications)) {
+              e.target.style.color = '#64748B';
+              e.target.style.transform = 'scale(1)';
+            }
           }}
         >📍</button>
 
@@ -2562,12 +2756,14 @@ const Dashboard = () => {
             setShowNotifications(false);
           }}
           style={{ 
-            background: (currentPage === 'chat' && !showCommunity && !showNotifications) ? '#ff6b9d' : 'none', 
+            background: (currentPage === 'chat' && !showCommunity && !showNotifications) ? '#6366F1' : 'none', 
             border: 'none', 
             padding: '10px', 
             fontSize: '24px', 
             cursor: 'pointer',
-            borderRadius: '12px'
+            borderRadius: '12px',
+            color: (currentPage === 'chat' && !showCommunity && !showNotifications) ? '#F8FAFC' : '#64748B',
+            transition: 'all 0.2s ease'
           }}
         >🤖</button>
 
@@ -2578,12 +2774,14 @@ const Dashboard = () => {
             setShowNotifications(false);
           }}
           style={{ 
-            background: (currentPage === 'settings' && !showCommunity && !showNotifications) ? '#ff6b9d' : 'none', 
+            background: (currentPage === 'settings' && !showCommunity && !showNotifications) ? '#6366F1' : 'none', 
             border: 'none', 
             padding: '10px', 
             fontSize: '24px', 
             cursor: 'pointer',
-            borderRadius: '12px'
+            borderRadius: '12px',
+            color: (currentPage === 'settings' && !showCommunity && !showNotifications) ? '#F8FAFC' : '#64748B',
+            transition: 'all 0.2s ease'
           }}
         >⚙️</button>
       </div>
@@ -2601,7 +2799,25 @@ const Dashboard = () => {
       )}
       
 
+      
+      {shakeSequence.length > 0 && (
+        <div style={{
+          position: 'fixed',
+          top: '50px',
+          right: '10px',
+          background: '#ff9500',
+          color: 'white',
+          padding: '5px 10px',
+          borderRadius: '15px',
+          fontSize: '12px',
+          zIndex: 1000
+        }}>
+          📳 Shake {shakeSequence.length}/3
+        </div>
+      )}
+
     </div>
+    </>
   );
 };
 

@@ -109,7 +109,10 @@ const CommunityNetwork = ({ isDark, onBack }) => {
   };
 
   const submitReport = async () => {
-    if (!newReport.description.trim()) return;
+    if (!newReport.description.trim()) {
+      alert('❌ Please add a description for your report');
+      return;
+    }
     
     try {
       // Get current location
@@ -124,31 +127,37 @@ const CommunityNetwork = ({ isDark, onBack }) => {
           userId: newReport.anonymous ? null : JSON.parse(localStorage.getItem('user'))?.id
         };
         
-        // Submit to API
-        const response = await fetch('http://localhost:5000/api/community/safety-reports', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${localStorage.getItem('token')}`
-          },
-          body: JSON.stringify(reportData)
-        });
-        
-        if (response.ok) {
-          const newReportFromAPI = await response.json();
-          setSafetyReports([newReportFromAPI, ...safetyReports]);
+        try {
+          // Try API first
+          const response = await fetch('http://localhost:3001/api/community/safety-reports', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${localStorage.getItem('token')}`
+            },
+            body: JSON.stringify(reportData)
+          });
           
-          // Update localStorage
-          const updatedReports = [newReportFromAPI, ...safetyReports];
-          localStorage.setItem('safetyReports', JSON.stringify(updatedReports));
-        } else {
-          // Fallback to localStorage
+          if (response.ok) {
+            const newReportFromAPI = await response.json();
+            const updatedReports = [newReportFromAPI, ...safetyReports];
+            setSafetyReports(updatedReports);
+            localStorage.setItem('safetyReports', JSON.stringify(updatedReports));
+          } else {
+            throw new Error('API failed');
+          }
+        } catch (apiError) {
+          console.log('API not available, saving locally');
+          // Save to localStorage when API is not available
           const localReport = {
             id: Date.now(),
-            ...newReport,
+            type: newReport.type,
+            description: newReport.description,
+            anonymous: newReport.anonymous,
             location: `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`,
             time: 'Just now',
-            votes: 1
+            votes: 1,
+            timestamp: new Date().toISOString()
           };
           
           const updatedReports = [localReport, ...safetyReports];
@@ -159,8 +168,28 @@ const CommunityNetwork = ({ isDark, onBack }) => {
         setNewReport({ type: 'safe', description: '', anonymous: true });
         setShowReportForm(false);
         alert('✅ Safety report submitted successfully!');
-      }, () => {
-        alert('❌ Location access required to submit report');
+        
+      }, (error) => {
+        console.error('Location error:', error);
+        // Submit without exact location
+        const localReport = {
+          id: Date.now(),
+          type: newReport.type,
+          description: newReport.description,
+          anonymous: newReport.anonymous,
+          location: 'Current Area',
+          time: 'Just now',
+          votes: 1,
+          timestamp: new Date().toISOString()
+        };
+        
+        const updatedReports = [localReport, ...safetyReports];
+        setSafetyReports(updatedReports);
+        localStorage.setItem('safetyReports', JSON.stringify(updatedReports));
+        
+        setNewReport({ type: 'safe', description: '', anonymous: true });
+        setShowReportForm(false);
+        alert('✅ Safety report submitted successfully!');
       });
     } catch (error) {
       console.error('Error submitting report:', error);
@@ -211,11 +240,11 @@ const CommunityNetwork = ({ isDark, onBack }) => {
   };
 
   const theme = {
-    bg: isDark ? '#000' : '#f8f9fa',
-    cardBg: isDark ? '#1c1c1e' : '#ffffff',
-    text: isDark ? '#fff' : '#333333',
-    subtext: isDark ? '#8e8e93' : '#666666',
-    border: isDark ? '#38383a' : '#e9ecef'
+    bg: '#0F172A',
+    cardBg: '#1E293B',
+    text: '#F8FAFC',
+    subtext: '#CBD5E1',
+    border: '#334155'
   };
 
   return (
@@ -239,7 +268,7 @@ const CommunityNetwork = ({ isDark, onBack }) => {
 
       {/* Emergency Alert Button */}
       <div style={{
-        background: 'linear-gradient(135deg, #ff416c 0%, #ff4b2b 100%)',
+        background: 'linear-gradient(135deg, #DC2626 0%, #B91C1C 100%)',
         borderRadius: '15px',
         padding: '20px',
         marginBottom: '20px',
@@ -295,7 +324,7 @@ const CommunityNetwork = ({ isDark, onBack }) => {
               </div>
             </div>
             <div style={{
-              background: user.status === 'safe' ? '#34c759' : user.status === 'alert' ? '#ff9500' : '#ff3b30',
+              background: user.status === 'safe' ? '#16A34A' : user.status === 'alert' ? '#F59E0B' : '#DC2626',
               color: 'white',
               padding: '4px 8px',
               borderRadius: '12px',
@@ -324,59 +353,84 @@ const CommunityNetwork = ({ isDark, onBack }) => {
           <button
             onClick={() => setShowReportForm(true)}
             style={{
-              background: '#667eea',
+              background: '#6366F1',
               color: 'white',
               border: 'none',
               padding: '8px 12px',
               borderRadius: '8px',
               fontSize: '12px',
-              cursor: 'pointer'
+              cursor: 'pointer',
+              fontFamily: 'Inter, sans-serif'
             }}
           >
             + Report
           </button>
         </div>
 
-        {safetyReports.map((report) => (
-          <div key={report.id} style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            padding: '12px',
-            marginBottom: '10px',
-            background: theme.bg,
-            borderRadius: '10px',
-            border: `1px solid ${theme.border}`
+        {safetyReports.length === 0 ? (
+          <div style={{
+            textAlign: 'center',
+            padding: '20px',
+            color: theme.subtext
           }}>
-            <div>
-              <div style={{ 
-                display: 'flex', 
-                alignItems: 'center', 
-                gap: '8px',
-                marginBottom: '4px'
-              }}>
-                <span style={{
-                  background: report.type === 'safe' ? '#34c759' : 
-                            report.type === 'caution' ? '#ff9500' : '#ff3b30',
-                  color: 'white',
-                  padding: '2px 6px',
-                  borderRadius: '8px',
-                  fontSize: '10px',
-                  textTransform: 'uppercase'
+            <div style={{ fontSize: '48px', marginBottom: '10px' }}>📍</div>
+            <div>No safety reports yet</div>
+            <div style={{ fontSize: '12px', marginTop: '5px' }}>Be the first to report safety status in your area</div>
+          </div>
+        ) : (
+          safetyReports.map((report) => (
+            <div key={report.id} style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'flex-start',
+              padding: '12px',
+              marginBottom: '10px',
+              background: theme.bg,
+              borderRadius: '10px',
+              border: `1px solid ${theme.border}`
+            }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '8px',
+                  marginBottom: '8px'
                 }}>
-                  {report.type === 'safe' ? '✅ Safe' : 
-                   report.type === 'caution' ? '⚠️ Caution' : '🚨 Unsafe'}
-                </span>
-                <span style={{ fontSize: '14px', fontWeight: '500', color: theme.text }}>
-                  {report.location}
-                </span>
-              </div>
-              <div style={{ fontSize: '12px', color: theme.subtext }}>
-                {report.time} • 👍 {report.votes} votes
+                  <span style={{
+                    background: report.type === 'safe' ? '#16A34A' : 
+                              report.type === 'caution' ? '#F59E0B' : '#DC2626',
+                    color: 'white',
+                    padding: '2px 6px',
+                    borderRadius: '8px',
+                    fontSize: '10px',
+                    textTransform: 'uppercase',
+                    fontWeight: 'bold'
+                  }}>
+                    {report.type === 'safe' ? '✅ Safe' : 
+                     report.type === 'caution' ? '⚠️ Caution' : '🚨 Unsafe'}
+                  </span>
+                  <span style={{ fontSize: '14px', fontWeight: '500', color: theme.text }}>
+                    {report.location}
+                  </span>
+                </div>
+                {report.description && (
+                  <div style={{ 
+                    fontSize: '13px', 
+                    color: theme.text, 
+                    marginBottom: '6px',
+                    lineHeight: '1.4'
+                  }}>
+                    {report.description}
+                  </div>
+                )}
+                <div style={{ fontSize: '12px', color: theme.subtext }}>
+                  {report.time} • 👍 {report.votes} votes
+                  {report.anonymous && ' • Anonymous'}
+                </div>
               </div>
             </div>
-          </div>
-        ))}
+          ))
+        )}
       </div>
 
       {/* Report Form Modal */}
@@ -394,11 +448,12 @@ const CommunityNetwork = ({ isDark, onBack }) => {
           zIndex: 1000
         }}>
           <div style={{
-            background: 'white',
+            background: '#1E293B',
             borderRadius: '15px',
             padding: '20px',
             maxWidth: '350px',
-            width: '90%'
+            width: '90%',
+            border: '1px solid #334155'
           }}>
             <h3 style={{ margin: '0 0 15px 0', color: theme.text }}>📍 Report Safety Status</h3>
             

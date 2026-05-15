@@ -23,7 +23,7 @@ import {
   CircularProgress,
   Alert,
 } from '@mui/material';
-import NivraLogo from '../components/NivraLogo';
+import NivraLogo from '../components/NivraLogo.jsx';
 import {
   ArrowBack,
   Emergency,

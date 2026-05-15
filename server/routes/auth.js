@@ -9,12 +9,15 @@ const router = express.Router();
 
 // User Schema
 const userSchema = new mongoose.Schema({
+  name: String,
   fullName: String,
   email: String,
   phone: String,
   password: String,
   role: { type: String, default: 'user' },
   status: { type: String, default: 'active' },
+  isActive: { type: Boolean, default: true },
+  isVerified: { type: Boolean, default: false },
   lastLogin: { type: Date, default: Date.now },
   emergencyContacts: [],
   resetPasswordToken: String,
@@ -81,7 +84,7 @@ router.post('/login', async (req, res) => {
       token,
       user: {
         id: user._id,
-        fullName: user.fullName,
+        fullName: user.name || user.fullName,
         email: user.email,
         phone: user.phone,
         role: user.role,
@@ -114,6 +117,7 @@ router.post('/register', async (req, res) => {
     const hashedPassword = await bcrypt.hash(password, 12);
     
     const user = new User({
+      name: fullName,
       fullName,
       email: email.toLowerCase(),
       phone,
@@ -127,7 +131,7 @@ router.post('/register', async (req, res) => {
       message: 'User registered successfully',
       user: {
         id: user._id,
-        fullName: user.fullName,
+        fullName: user.name || user.fullName,
         email: user.email,
         phone: user.phone
       }

@@ -3,6 +3,7 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const nodemailer = require('nodemailer');
 const emergencyRoutes = require('./routes/emergency');
 const communityRoutes = require('./routes/community');
 const adminRoutes = require('./routes/admin');
@@ -11,8 +12,96 @@ require('dotenv').config();
 const app = express();
 
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: true,
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
 app.use(express.json());
+
+// Handle preflight requests
+app.options('*', cors());
+
+// PUBLIC ADMIN ROUTES (No auth required for demo)
+app.get('/api/admin/stats', async (req, res) => {
+  try {
+    console.log('📊 Fetching admin stats...');
+    
+    const totalUsers = await User.countDocuments({ role: { $ne: 'admin' } });
+    const activeAlerts = await Alert.countDocuments({ status: 'active' });
+    const resolvedAlerts = await Alert.countDocuments({ status: 'resolved' });
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const todayAlerts = await Alert.countDocuments({ 
+      createdAt: { $gte: todayStart } 
+    });
+    
+    console.log('📈 Stats:', { totalUsers, activeAlerts, resolvedAlerts, todayAlerts });
+    
+    res.json({ 
+      totalUsers, 
+      activeAlerts, 
+      resolvedAlerts,
+      todayAlerts,
+      responseTime: `${Math.floor(Math.random() * 5) + 1} min`,
+      uptime: '99.8%',
+      systemHealth: 'Good',
+      onlineUsers: Math.floor(totalUsers * 0.3)
+    });
+  } catch (error) {
+    console.error('❌ Admin stats error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+app.get('/api/admin/users', async (req, res) => {
+  try {
+    const users = await User.find({ role: { $ne: 'admin' } }).select('fullName email phone createdAt').limit(50);
+    const formattedUsers = users.map(u => ({
+      id: u._id,
+      name: u.fullName,
+      email: u.email,
+      phone: u.phone,
+      status: 'Active',
+      lastSeen: 'Recently',
+      joinDate: u.createdAt.toLocaleDateString(),
+      emergencyContacts: Math.floor(Math.random() * 5) + 1
+    }));
+    res.json(formattedUsers);
+  } catch (error) {
+    console.error('❌ Admin users error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+app.get('/api/admin/alerts', async (req, res) => {
+  try {
+    const alerts = await Alert.find()
+      .populate('userId', 'fullName email')
+      .sort({ createdAt: -1 })
+      .limit(20);
+    
+    const formattedAlerts = alerts.map(alert => ({
+      id: alert._id,
+      user: alert.userId?.fullName || 'Unknown User',
+      type: alert.type,
+      location: alert.location?.address || 'Location not available',
+      status: alert.status,
+      time: alert.createdAt.toLocaleString(),
+      createdAt: alert.createdAt
+    }));
+    
+    res.json(formattedAlerts);
+  } catch (error) {
+    console.error('❌ Admin alerts error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+app.get('/api/admin/health', async (req, res) => {
+  res.json({ status: 'OK', uptime: '99.8%', database: 'Connected' });
+});
 
 // Routes
 app.use('/api/emergency', emergencyRoutes);
@@ -43,18 +132,25 @@ app.post('/api/auth/login', async (req, res) => {
   try {
     const { email, password } = req.body;
     
+    console.log('🔑 Login attempt for:', email);
+    
     const user = await User.findOne({ email });
     if (!user) {
+      console.log('❌ User not found:', email);
       return res.status(401).json({ success: false, message: 'User not found. Please register first.' });
     }
     
+    console.log('👤 User found, checking password...');
     const isValid = await bcrypt.compare(password, user.password);
+    console.log('🔒 Password valid:', isValid);
+    
     if (!isValid) {
       return res.status(401).json({ success: false, message: 'Invalid password' });
     }
     
     const token = jwt.sign({ id: user._id, email: user.email, fullName: user.fullName }, process.env.JWT_SECRET || 'secret-key');
     
+    console.log('✅ Login successful for:', email);
     res.json({
       success: true,
       token,
@@ -101,6 +197,159 @@ app.post('/api/auth/register', async (req, res) => {
   }
 });
 
+// Email configuration
+const transporter = nodemailer.createTransport({
+  service: 'gmail',
+  auth: {
+    user: process.env.EMAIL_USER || 'sapnasp1206@gmail.com',
+    pass: process.env.EMAIL_PASS || 'ifbh wcdo albv crvr'
+  }
+});
+
+// Manual password reset for testing
+app.post('/api/debug/reset-password', async (req, res) => {
+  try {
+    const { email, newPassword } = req.body;
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    
+    user.password = await bcrypt.hash(newPassword, 10);
+    await user.save();
+    
+    res.json({ success: true, message: 'Password updated successfully' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get all users for debugging
+app.get('/api/debug/users', async (req, res) => {
+  try {
+    const users = await User.find({}, 'email fullName');
+    res.json(users);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Forgot Password Route - OTP Based
+app.post('/api/auth/forgot-password', async (req, res) => {
+  try {
+    const { email } = req.body;
+    
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+    
+    // Generate 6-digit OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    
+    // Store OTP in user
+    user.resetPasswordToken = otp;
+    user.resetPasswordExpires = Date.now() + 10 * 60 * 1000; // 10 minutes
+    await user.save();
+    
+    console.log('💾 OTP stored in DB:', otp, 'for user:', email);
+    console.log('⏰ Expires at:', new Date(user.resetPasswordExpires));
+    
+    // Send OTP via email
+    try {
+      console.log('📧 Attempting to send email to:', email);
+      console.log('📧 Using credentials:', process.env.EMAIL_USER);
+      
+      const mailOptions = {
+        from: process.env.EMAIL_USER || 'sapnasp1206@gmail.com',
+        to: email,
+        subject: 'NIVRA - Password Reset OTP',
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #ff6b9d;">NIVRA Password Reset</h2>
+            <p>Your OTP for password reset is:</p>
+            <h1 style="background: #f0f0f0; padding: 20px; text-align: center; font-size: 32px; color: #333;">${otp}</h1>
+            <p>This OTP will expire in 5 minutes.</p>
+            <p>If you didn't request this, please ignore this email.</p>
+          </div>
+        `
+      };
+      
+      const info = await transporter.sendMail(mailOptions);
+      console.log('✅ Email sent successfully:', info.messageId);
+      
+      res.json({ 
+        success: true, 
+        message: 'OTP sent to your email successfully'
+      });
+    } catch (emailError) {
+      console.error('❌ Email sending failed:', emailError.message);
+      console.log(`📱 Fallback - OTP for ${email}: ${otp}`);
+      res.json({ 
+        success: true, 
+        message: 'OTP generated (email service unavailable)',
+        otp: otp,
+        emailError: emailError.message
+      });
+    }
+  } catch (error) {
+    console.error('Forgot password error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// Verify OTP and Reset Password
+app.post('/api/auth/verify-otp', async (req, res) => {
+  try {
+    const { email, otp, newPassword } = req.body;
+    
+    console.log('🔍 Verifying OTP for:', email);
+    console.log('🔍 Received OTP:', otp);
+    
+    // Find user by email only first
+    const user = await User.findOne({ email });
+    if (!user) {
+      console.log('❌ User not found:', email);
+      // List all users for debugging
+      const allUsers = await User.find({}, 'email');
+      console.log('📋 Available users:', allUsers.map(u => u.email));
+      return res.status(400).json({ success: false, message: 'User not found' });
+    }
+    
+    console.log('💾 User found, stored OTP:', user.resetPasswordToken);
+    console.log('⏰ Token expires at:', new Date(user.resetPasswordExpires));
+    console.log('🕐 Current time:', new Date());
+    
+    // Simple OTP check - convert both to strings and trim
+    const storedOTP = String(user.resetPasswordToken || '').trim();
+    const receivedOTP = String(otp || '').trim();
+    
+    console.log('🔍 Comparing OTPs:', { stored: storedOTP, received: receivedOTP });
+    
+    if (storedOTP !== receivedOTP) {
+      console.log('❌ OTP mismatch');
+      return res.status(400).json({ success: false, message: 'Invalid OTP' });
+    }
+    
+    if (!user.resetPasswordExpires || user.resetPasswordExpires <= Date.now()) {
+      console.log('❌ OTP expired');
+      return res.status(400).json({ success: false, message: 'OTP expired' });
+    }
+    
+    // Update password
+    user.password = await bcrypt.hash(newPassword, 10);
+    user.resetPasswordToken = undefined;
+    user.resetPasswordExpires = undefined;
+    await user.save();
+    
+    console.log('✅ Password reset successful for:', email);
+    res.json({ success: true, message: 'Password reset successful' });
+  } catch (error) {
+    console.error('❌ Reset password error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
 // Admin Login Route
 app.post('/api/auth/admin-login', async (req, res) => {
   try {
@@ -127,25 +376,39 @@ app.post('/api/auth/admin-login', async (req, res) => {
   }
 });
 
-// Admin Stats
+// Admin Stats (Public for demo)
 app.get('/api/admin/stats', async (req, res) => {
   try {
-    const totalUsers = await User.countDocuments({ role: 'user' });
+    console.log('📊 Fetching admin stats...');
+    
+    const totalUsers = await User.countDocuments({ role: { $ne: 'admin' } });
     const activeAlerts = await Alert.countDocuments({ status: 'active' });
     const resolvedAlerts = await Alert.countDocuments({ status: 'resolved' });
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const todayAlerts = await Alert.countDocuments({ 
+      createdAt: { $gte: todayStart } 
+    });
+    
+    console.log('📈 Stats:', { totalUsers, activeAlerts, resolvedAlerts, todayAlerts });
     
     res.json({ 
       totalUsers, 
       activeAlerts, 
-      resolvedAlerts, 
-      onlineUsers: Math.floor(totalUsers * 0.3) // Simulated online users
+      resolvedAlerts,
+      todayAlerts,
+      responseTime: `${Math.floor(Math.random() * 5) + 1} min`,
+      uptime: '99.8%',
+      systemHealth: 'Good',
+      onlineUsers: Math.floor(totalUsers * 0.3)
     });
   } catch (error) {
+    console.error('❌ Admin stats error:', error);
     res.status(500).json({ message: 'Server error' });
   }
 });
 
-// Admin Alerts
+// Admin Alerts (No auth required for demo)
 app.get('/api/admin/alerts', async (req, res) => {
   try {
     const alerts = await Alert.find()
@@ -154,26 +417,39 @@ app.get('/api/admin/alerts', async (req, res) => {
       .limit(20);
     
     const formattedAlerts = alerts.map(alert => ({
-      _id: alert._id,
-      user: { fullName: alert.userId?.fullName || 'Unknown User' },
-      type: alert.type.toUpperCase(),
-      location: alert.location,
+      id: alert._id,
+      user: alert.userId?.fullName || 'Unknown User',
+      type: alert.type,
+      location: alert.location?.address || 'Location not available',
       status: alert.status,
+      time: alert.createdAt.toLocaleString(),
       createdAt: alert.createdAt
     }));
     
     res.json(formattedAlerts);
   } catch (error) {
+    console.error('❌ Admin alerts error:', error);
     res.status(500).json({ message: 'Server error' });
   }
 });
 
-// Admin Users
+// Admin Users (No auth required for demo)
 app.get('/api/admin/users', async (req, res) => {
   try {
-    const users = await User.find({ role: 'user' }).select('fullName email phone').limit(10);
-    res.json(users.map(u => ({...u.toObject(), isActive: true, lastLogin: new Date()})));
+    const users = await User.find({ role: { $ne: 'admin' } }).select('fullName email phone createdAt').limit(50);
+    const formattedUsers = users.map(u => ({
+      id: u._id,
+      name: u.fullName,
+      email: u.email,
+      phone: u.phone,
+      status: 'Active',
+      lastSeen: 'Recently',
+      joinDate: u.createdAt.toLocaleDateString(),
+      emergencyContacts: Math.floor(Math.random() * 5) + 1
+    }));
+    res.json(formattedUsers);
   } catch (error) {
+    console.error('❌ Admin users error:', error);
     res.status(500).json({ message: 'Server error' });
   }
 });
@@ -244,6 +520,6 @@ mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/nivra-app
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`✅ Server running on port ${PORT}`);
+  console.log(`🌐 API available at: http://localhost:${PORT}`);
 });

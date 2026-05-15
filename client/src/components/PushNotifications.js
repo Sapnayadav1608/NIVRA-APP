@@ -154,11 +154,11 @@ const PushNotifications = ({ isDark, onBack }) => {
   };
 
   const theme = {
-    bg: isDark ? '#000' : '#f8f9fa',
-    cardBg: isDark ? '#1c1c1e' : '#ffffff',
-    text: isDark ? '#fff' : '#333333',
-    subtext: isDark ? '#8e8e93' : '#666666',
-    border: isDark ? '#38383a' : '#e9ecef'
+    bg: '#0F172A',
+    cardBg: '#1E293B',
+    text: '#F8FAFC',
+    subtext: '#CBD5E1',
+    border: '#334155'
   };
 
   return (
@@ -194,8 +194,8 @@ const PushNotifications = ({ isDark, onBack }) => {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
             <span style={{ color: theme.text }}>Permission Status:</span>
             <span style={{
-              background: permission === 'granted' ? '#34c759' : 
-                         permission === 'denied' ? '#ff3b30' : '#ff9500',
+              background: permission === 'granted' ? '#16A34A' : 
+                         permission === 'denied' ? '#DC2626' : '#F59E0B',
               color: 'white',
               padding: '4px 8px',
               borderRadius: '12px',
@@ -209,7 +209,7 @@ const PushNotifications = ({ isDark, onBack }) => {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
             <span style={{ color: theme.text }}>Push Subscription:</span>
             <span style={{
-              background: isSubscribed ? '#34c759' : '#8e8e93',
+              background: isSubscribed ? '#16A34A' : '#64748B',
               color: 'white',
               padding: '4px 8px',
               borderRadius: '12px',
@@ -225,7 +225,7 @@ const PushNotifications = ({ isDark, onBack }) => {
             onClick={requestPermission}
             style={{
               width: '100%',
-              background: '#667eea',
+              background: '#6366F1',
               color: 'white',
               border: 'none',
               padding: '15px',
@@ -233,7 +233,8 @@ const PushNotifications = ({ isDark, onBack }) => {
               fontSize: '16px',
               fontWeight: '500',
               cursor: 'pointer',
-              marginBottom: '10px'
+              marginBottom: '10px',
+              fontFamily: 'Inter, sans-serif'
             }}
           >
             🔔 Enable Notifications
@@ -247,13 +248,14 @@ const PushNotifications = ({ isDark, onBack }) => {
           }}
           style={{
             width: '100%',
-            background: notificationsEnabled ? '#34c759' : '#8e8e93',
+            background: notificationsEnabled ? '#16A34A' : '#64748B',
             color: 'white',
             border: 'none',
             padding: '12px',
             borderRadius: '10px',
             fontSize: '14px',
-            cursor: 'pointer'
+            cursor: 'pointer',
+            fontFamily: 'Inter, sans-serif'
           }}
         >
           {notificationsEnabled ? '🔔 Notifications Enabled' : '🔕 Notifications Disabled'}
@@ -306,7 +308,7 @@ const PushNotifications = ({ isDark, onBack }) => {
                 setNotifications([...notifications]);
               }}
               style={{
-                background: localStorage.getItem(`nivra_notif_${type.key}`) !== 'false' ? '#34c759' : '#8e8e93',
+                background: localStorage.getItem(`nivra_notif_${type.key}`) !== 'false' ? '#16A34A' : '#64748B',
                 color: 'white',
                 border: 'none',
                 borderRadius: '12px',

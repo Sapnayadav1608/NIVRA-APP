@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Shake & Voice Detection</title>
+</head>
+<body>
+    <h1>🧪 Test NIVRA Features</h1>
+    
+    <div id="status">
+        <h2>📳 Shake Detection</h2>
+        <p id="shake-status">Waiting...</p>
+        <p id="shake-count">Shakes: 0/3</p>
+        
+        <h2>🎤 Voice Detection</h2>
+        <p id="voice-status">Waiting...</p>
+        <button onclick="startVoice()">Start Voice Detection</button>
+        <button onclick="testShake()">Test Shake (Desktop)</button>
+    </div>
+
+    <script>
+        let shakeCount = 0;
+        let isListening = false;
+
+        // Test Shake Detection
+        function handleDeviceMotion(event) {
+            const { accelerationIncludingGravity } = event;
+            if (!accelerationIncludingGravity) return;
+            
+            const { x, y, z } = accelerationIncludingGravity;
+            const totalAcceleration = Math.sqrt(x * x + y * y + z * z);
+            
+            if (totalAcceleration > 15) {
+                shakeCount++;
+                document.getElementById('shake-count').textContent = `Shakes: ${shakeCount}/3`;
+                document.getElementById('shake-status').textContent = `📳 SHAKE DETECTED! Force: ${totalAcceleration.toFixed(2)}`;
+                
+                if (shakeCount >= 3) {
+                    alert('🚨 EMERGENCY SHAKE DETECTED!');
+                    shakeCount = 0;
+                }
+            }
+        }
+
+        // Test Voice Detection
+        function startVoice() {
+            if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+                const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+                const recognition = new SpeechRecognition();
+                
+                recognition.continuous = true;
+                recognition.interimResults = true;
+                recognition.lang = 'en-US';
+                
+                recognition.onstart = () => {
+                    isListening = true;
+                    document.getElementById('voice-status').textContent = '🎤 LISTENING...';
+                };
+                
+                recognition.onresult = (event) => {
+                    const transcript = event.results[event.results.length - 1][0].transcript.toLowerCase();
+                    document.getElementById('voice-status').textContent = `Heard: "${transcript}"`;
+                    
+                    const panicWords = ['help', 'emergency', 'sos', 'bachao'];
+                    
+                    if (panicWords.some(word => transcript.includes(word))) {
+                        alert('🚨 PANIC VOICE DETECTED: ' + transcript);
+                        recognition.stop();
+                    }
+                };
+                
+                recognition.onerror = (error) => {
+                    document.getElementById('voice-status').textContent = '❌ Error: ' + error.error;
+                };
+                
+                recognition.start();
+            } else {
+                alert('❌ Speech recognition not supported');
+            }
+        }
+
+        // Desktop shake test
+        function testShake() {
+            shakeCount++;
+            document.getElementById('shake-count').textContent = `Shakes: ${shakeCount}/3`;
+            document.getElementById('shake-status').textContent = '🖱️ Desktop shake test';
+            
+            if (shakeCount >= 3) {
+                alert('🚨 DESKTOP SHAKE TEST TRIGGERED!');
+                shakeCount = 0;
+            }
+        }
+
+        // Initialize
+        if (typeof DeviceMotionEvent !== 'undefined') {
+            if (typeof DeviceMotionEvent.requestPermission === 'function') {
+                DeviceMotionEvent.requestPermission().then(response => {
+                    if (response === 'granted') {
+                        window.addEventListener('devicemotion', handleDeviceMotion);
+                        document.getElementById('shake-status').textContent = '✅ iOS Motion enabled';
+                    }
+                });
+            } else {
+                window.addEventListener('devicemotion', handleDeviceMotion);
+                document.getElementById('shake-status').textContent = '✅ Android Motion enabled';
+            }
+        } else {
+            document.getElementById('shake-status').textContent = '❌ Device motion not supported';
+        }
+    </script>
+</body>
+</html>

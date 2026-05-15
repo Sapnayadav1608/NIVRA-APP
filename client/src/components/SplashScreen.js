@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import NivraLogo from './NivraLogo.jsx';
+import { professionalTheme } from '../theme/professionalTheme';
 
 const SplashScreen = ({ onComplete }) => {
   const [progress, setProgress] = useState(0);
@@ -26,43 +27,42 @@ const SplashScreen = ({ onComplete }) => {
       left: 0,
       width: '100%',
       height: '100%',
-      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+      background: professionalTheme.gradients.primary,
       display: 'flex',
       flexDirection: 'column',
       justifyContent: 'center',
       alignItems: 'center',
       zIndex: 9999,
-      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+      fontFamily: professionalTheme.typography.fontFamily
     }}>
       {/* Logo */}
-      <div style={{
+      <div className="logo-hover" style={{
         marginBottom: '20px',
-        animation: 'pulse 2s infinite'
+        display: 'inline-block'
       }}>
         <NivraLogo size={80} />
       </div>
 
       {/* App Name */}
-      <h1 style={{
-        color: '#8A2BE2',
+      <h1 className="brand-hover" style={{
+        color: professionalTheme.colors.primaryAccent,
         fontSize: '48px',
-        fontWeight: '700',
+        fontWeight: professionalTheme.typography.weights.bold,
         margin: '0 0 10px 0',
-        textShadow: '0 2px 10px rgba(0,0,0,0.3)',
-        background: 'rgba(255,255,255,0.9)',
+        background: `rgba(${professionalTheme.colors.secondaryBg.slice(1).match(/.{2}/g).map(hex => parseInt(hex, 16)).join(', ')}, 0.9)`,
         padding: '10px 20px',
-        borderRadius: '15px'
+        borderRadius: professionalTheme.borderRadius.large
       }}>
         NIVRA
       </h1>
 
       {/* Tagline */}
       <p style={{
-        color: 'rgba(255,255,255,0.9)',
+        color: professionalTheme.colors.primaryText,
         fontSize: '18px',
         margin: '0 0 40px 0',
         textAlign: 'center',
-        fontWeight: '500'
+        fontWeight: professionalTheme.typography.weights.medium
       }}>
         Your Safety, Our Priority
       </p>
@@ -71,7 +71,7 @@ const SplashScreen = ({ onComplete }) => {
       <div style={{
         width: '200px',
         height: '4px',
-        background: 'rgba(255,255,255,0.3)',
+        background: `rgba(${professionalTheme.colors.border.slice(1).match(/.{2}/g).map(hex => parseInt(hex, 16)).join(', ')}, 0.3)`,
         borderRadius: '2px',
         overflow: 'hidden',
         marginBottom: '20px'
@@ -79,7 +79,7 @@ const SplashScreen = ({ onComplete }) => {
         <div style={{
           width: `${progress}%`,
           height: '100%',
-          background: 'white',
+          background: professionalTheme.colors.primaryAccent,
           borderRadius: '2px',
           transition: 'width 0.1s ease'
         }} />
@@ -87,7 +87,7 @@ const SplashScreen = ({ onComplete }) => {
 
       {/* Loading Text */}
       <p style={{
-        color: 'rgba(255,255,255,0.8)',
+        color: professionalTheme.colors.secondaryText,
         fontSize: '14px',
         margin: 0
       }}>
@@ -100,6 +100,24 @@ const SplashScreen = ({ onComplete }) => {
         @keyframes pulse {
           0%, 100% { transform: scale(1); }
           50% { transform: scale(1.1); }
+        }
+        .logo-hover {
+          transition: all 0.3s ease;
+          filter: drop-shadow(0 0 10px rgba(255, 107, 157, 0.3));
+          cursor: pointer;
+        }
+        .logo-hover:hover {
+          filter: drop-shadow(0 0 20px rgba(255, 107, 157, 0.8)) drop-shadow(0 0 30px rgba(255, 107, 157, 0.6));
+          transform: scale(1.1) rotate(5deg);
+        }
+        .brand-hover {
+          transition: all 0.3s ease;
+          text-shadow: 0 0 10px rgba(99, 102, 241, 0.3);
+          cursor: pointer;
+        }
+        .brand-hover:hover {
+          text-shadow: 0 0 20px rgba(99, 102, 241, 0.8), 0 0 30px rgba(99, 102, 241, 0.6), 0 0 40px rgba(99, 102, 241, 0.4);
+          transform: scale(1.05);
         }
       `}</style>
     </div>

@@ -8,8 +8,8 @@ class AdminService {
   // Get authorization headers
   getHeaders() {
     return {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${this.token || localStorage.getItem('token')}`
+      'Content-Type': 'application/json'
+      // Removed Authorization for demo
     };
   }
 

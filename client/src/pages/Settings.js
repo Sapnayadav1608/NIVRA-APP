@@ -2,7 +2,7 @@ import React from 'react';
 import { useDispatch } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import { logout } from '../store/slices/authSlice';
-import NivraLogo from '../components/NivraLogo';
+import NivraLogo from '../components/NivraLogo.jsx';
 
 const Settings = () => {
   const dispatch = useDispatch();

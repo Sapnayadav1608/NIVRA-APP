@@ -8,13 +8,19 @@ export const loginUser = createAsyncThunk(
   async (credentials, { rejectWithValue }) => {
     try {
       console.log('Login attempt:', credentials);
+      console.log('API URL:', API_URL);
       const response = await axios.post(`${API_URL}/login`, credentials);
       console.log('Login response:', response.data);
-      localStorage.setItem('token', response.data.token);
-      return response.data;
+      if (response.data.success) {
+        localStorage.setItem('token', response.data.token);
+        return response.data;
+      } else {
+        return rejectWithValue(response.data.message || 'Login failed');
+      }
     } catch (error) {
-      console.error('Login error:', error.response?.data);
-      return rejectWithValue(error.response?.data?.message || 'Login failed');
+      console.error('Login error full:', error);
+      console.error('Login error response:', error.response?.data);
+      return rejectWithValue(error.response?.data?.message || error.message || 'Login failed');
     }
   }
 );
@@ -47,14 +53,17 @@ export const forgotPassword = createAsyncThunk(
   }
 );
 
-export const resetPassword = createAsyncThunk(
-  'auth/resetPassword',
-  async ({ token, password }, { rejectWithValue }) => {
+export const verifyOTP = createAsyncThunk(
+  'auth/verifyOTP',
+  async ({ email, otp, newPassword }, { rejectWithValue }) => {
     try {
-      const response = await axios.post(`${API_URL}/reset-password/${token}`, { password });
+      console.log('Redux verifyOTP called with:', { email, otp, newPassword: '***' });
+      const response = await axios.post(`${API_URL}/verify-otp`, { email, otp, newPassword });
+      console.log('OTP Response:', response.data);
       return response.data;
     } catch (error) {
-      return rejectWithValue(error.response?.data?.message || 'Failed to reset password');
+      console.error('OTP Error:', error.response?.data);
+      return rejectWithValue(error.response?.data?.message || 'Failed to verify OTP');
     }
   }
 );
@@ -67,6 +76,8 @@ const initialState = {
   error: null,
   resetEmailSent: false,
   passwordResetSuccess: false,
+  otpSent: false,
+  generatedOTP: null,
 };
 
 const authSlice = createSlice({
@@ -87,6 +98,8 @@ const authSlice = createSlice({
     clearResetState: (state) => {
       state.resetEmailSent = false;
       state.passwordResetSuccess = false;
+      state.otpSent = false;
+      state.generatedOTP = null;
       state.error = null;
     },
     setAuthenticated: (state, action) => {
@@ -129,25 +142,26 @@ const authSlice = createSlice({
         state.isLoading = true;
         state.error = null;
       })
-      .addCase(forgotPassword.fulfilled, (state) => {
+      .addCase(forgotPassword.fulfilled, (state, action) => {
         state.isLoading = false;
-        state.resetEmailSent = true;
+        state.otpSent = true;
+        state.generatedOTP = action.payload.otp;
         state.error = null;
       })
       .addCase(forgotPassword.rejected, (state, action) => {
         state.isLoading = false;
         state.error = action.payload;
       })
-      .addCase(resetPassword.pending, (state) => {
+      .addCase(verifyOTP.pending, (state) => {
         state.isLoading = true;
         state.error = null;
       })
-      .addCase(resetPassword.fulfilled, (state) => {
+      .addCase(verifyOTP.fulfilled, (state) => {
         state.isLoading = false;
         state.passwordResetSuccess = true;
         state.error = null;
       })
-      .addCase(resetPassword.rejected, (state, action) => {
+      .addCase(verifyOTP.rejected, (state, action) => {
         state.isLoading = false;
         state.error = action.payload;
       });

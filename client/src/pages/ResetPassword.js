@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { Link, useParams, useNavigate } from 'react-router-dom';
-import { resetPassword, clearError, clearResetState } from '../store/slices/authSlice';
+import { useParams, useNavigate, Link } from 'react-router-dom';
+import { verifyOTP, clearError } from '../store/slices/authSlice';
 import NivraLogo from '../components/NivraLogo.jsx';
 
 const ResetPassword = () => {
@@ -9,34 +9,26 @@ const ResetPassword = () => {
   const navigate = useNavigate();
   const { token } = useParams();
   const { isLoading, error, passwordResetSuccess } = useSelector((state) => state.auth);
-  
-  const [formData, setFormData] = useState({
-    password: '',
-    confirmPassword: ''
-  });
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [validationError, setValidationError] = useState('');
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setValidationError('');
-
-    if (formData.password !== formData.confirmPassword) {
-      setValidationError('Passwords do not match');
+    
+    if (password !== confirmPassword) {
+      alert('Passwords do not match');
       return;
     }
-
-    if (formData.password.length < 6) {
-      setValidationError('Password must be at least 6 characters long');
+    
+    if (password.length < 6) {
+      alert('Password must be at least 6 characters');
       return;
     }
-
-    const result = await dispatch(resetPassword({ token, password: formData.password }));
-    if (result.type === 'auth/resetPassword/fulfilled') {
-      setTimeout(() => {
-        dispatch(clearResetState());
-        navigate('/login');
-      }, 3000);
+    
+    const result = await dispatch(verifyOTP({ email: 'temp@email.com', otp: token, newPassword: password }));
+    if (result.type === 'auth/verifyOTP/fulfilled') {
+      setTimeout(() => navigate('/login'), 2000);
     }
   };
 
@@ -72,25 +64,8 @@ const ResetPassword = () => {
           </h2>
           
           <p style={{ color: '#666', fontSize: '16px', marginBottom: '30px' }}>
-            Your password has been successfully reset. You will be redirected to login page shortly.
+            Your password has been updated successfully. Redirecting to login...
           </p>
-          
-          <Link
-            to="/login"
-            onClick={() => dispatch(clearResetState())}
-            style={{
-              display: 'inline-block',
-              background: 'linear-gradient(135deg, #ff6b9d 0%, #c53975 100%)',
-              color: 'white',
-              textDecoration: 'none',
-              padding: '15px 30px',
-              borderRadius: '12px',
-              fontSize: '16px',
-              fontWeight: '600'
-            }}
-          >
-            Go to Login
-          </Link>
         </div>
       </div>
     );
@@ -129,7 +104,7 @@ const ResetPassword = () => {
           Enter your new password below.
         </p>
 
-        {(error || validationError) && (
+        {error && (
           <div style={{
             background: '#ffe6e6',
             color: '#d63384',
@@ -139,7 +114,7 @@ const ResetPassword = () => {
             fontSize: '14px',
             textAlign: 'center'
           }}>
-            {error || validationError}
+            {error}
           </div>
         )}
 
@@ -148,11 +123,10 @@ const ResetPassword = () => {
             <input
               type={showPassword ? 'text' : 'password'}
               placeholder="New Password"
-              value={formData.password}
+              value={password}
               onChange={(e) => {
-                setFormData({ ...formData, password: e.target.value });
+                setPassword(e.target.value);
                 if (error) dispatch(clearError());
-                if (validationError) setValidationError('');
               }}
               required
               style={{
@@ -186,12 +160,8 @@ const ResetPassword = () => {
             <input
               type={showPassword ? 'text' : 'password'}
               placeholder="Confirm New Password"
-              value={formData.confirmPassword}
-              onChange={(e) => {
-                setFormData({ ...formData, confirmPassword: e.target.value });
-                if (error) dispatch(clearError());
-                if (validationError) setValidationError('');
-              }}
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
               required
               style={{
                 width: '100%',
@@ -220,14 +190,13 @@ const ResetPassword = () => {
               opacity: isLoading ? 0.7 : 1
             }}
           >
-            {isLoading ? 'Resetting...' : 'Reset Password'}
+            {isLoading ? 'Updating...' : 'Update Password'}
           </button>
         </form>
 
         <div style={{ textAlign: 'center', marginTop: '25px' }}>
           <Link
             to="/login"
-            onClick={() => dispatch(clearResetState())}
             style={{
               color: '#ff6b9d',
               textDecoration: 'none',

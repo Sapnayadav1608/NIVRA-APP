@@ -7,7 +7,7 @@ import Dashboard from './pages/Dashboard';
 import AdminLogin from './pages/AdminLogin';
 import AdminDashboard from './pages/AdminDashboard';
 import ForgotPassword from './pages/ForgotPassword';
-import ResetPassword from './pages/ResetPassword';
+
 import LiveTracking from './pages/LiveTracking';
 import EmergencyContacts from './pages/EmergencyContacts';
 import SplashScreen from './components/SplashScreen';
@@ -24,15 +24,10 @@ function App() {
       // Auto login if token exists
       dispatch({ type: 'auth/setAuthenticated', payload: { token, user: JSON.parse(localStorage.getItem('user') || '{}') } });
     }
-
   }, [dispatch]);
 
   if (showSplash) {
     return <SplashScreen onComplete={() => setShowSplash(false)} />;
-  }
-
-  if (isLoading) {
-    return <div style={{display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh'}}>Loading...</div>;
   }
 
   return (
@@ -40,7 +35,7 @@ function App() {
       <Route path="/login" element={!isAuthenticated ? <Login /> : <Navigate to="/dashboard" />} />
       <Route path="/register" element={!isAuthenticated ? <Register /> : <Navigate to="/dashboard" />} />
       <Route path="/forgot-password" element={!isAuthenticated ? <ForgotPassword /> : <Navigate to="/dashboard" />} />
-      <Route path="/reset-password/:token" element={!isAuthenticated ? <ResetPassword /> : <Navigate to="/dashboard" />} />
+
       <Route path="/dashboard" element={isAuthenticated ? <Dashboard /> : <Navigate to="/login" />} />
       <Route path="/live-tracking" element={isAuthenticated ? <LiveTracking /> : <Navigate to="/login" />} />
       <Route path="/emergency-contacts" element={isAuthenticated ? <EmergencyContacts /> : <Navigate to="/login" />} />
