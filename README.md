@@ -176,18 +176,6 @@ App will run at `http://localhost:3000`
 
 ---
 
-## 🔑 Default Credentials (After Seeding)
-
-| Role | Email | Password |
-|------|-------|----------|
-| Admin | admin@nivra.app | admin123 |
-| User 1 | sarah@example.com | password123 |
-| User 2 | maria@example.com | password123 |
-
-> ⚠️ Change these credentials in production!
-
----
-
 ## 📱 PWA Installation
 
 NIVRA can be installed as a Progressive Web App:
