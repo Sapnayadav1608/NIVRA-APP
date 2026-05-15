@@ -28,8 +28,5 @@ Thumbs.db
 # IDE
 .vscode/
 .idea/
-
-# Markdown docs
-*.md
 node_modules
 node_modules
