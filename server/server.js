@@ -523,9 +523,8 @@ mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/nivra-app
   console.log('📊 Database: nivra-app');
 })
 .catch(err => {
-  console.error('❌ MongoDB connection error:', err.message);
-  console.log('💡 Make sure MongoDB is running on localhost:27017');
-  process.exit(1);
+  console.error('⚠️ MongoDB connection warning:', err.message);
+  console.log('💡 Serving HTTP endpoints with fallback demo data mode');
 });
 
 const PORT = process.env.PORT || 5000;
