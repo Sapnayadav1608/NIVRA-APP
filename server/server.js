@@ -23,7 +23,17 @@ app.use(express.json());
 // Handle preflight requests
 app.options('*', cors());
 
+// Root Health Check for Render / Cloud deployments
+app.get('/', (req, res) => {
+  res.json({
+    status: 'online',
+    app: 'NIVRA Backend API',
+    timestamp: new Date()
+  });
+});
+
 // PUBLIC ADMIN ROUTES (No auth required for demo)
+
 app.get('/api/admin/stats', async (req, res) => {
   try {
     console.log('📊 Fetching admin stats...');

@@ -1,4 +1,5 @@
 import { io } from 'socket.io-client';
+import { SERVER_BASE_URL } from '../config';
 
 class SocketService {
   constructor() {
@@ -11,7 +12,8 @@ class SocketService {
       this.disconnect();
     }
 
-    const serverUrl = process.env.REACT_APP_SERVER_URL || 'http://localhost:5000';
+    const serverUrl = SERVER_BASE_URL;
+
     
     this.socket = io(serverUrl, {
       auth: {

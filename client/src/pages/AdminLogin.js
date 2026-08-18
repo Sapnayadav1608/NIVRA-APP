@@ -4,6 +4,7 @@ import { Shield } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import NivraLogo from '../components/NivraLogo.jsx';
 import { professionalTheme } from '../theme/professionalTheme';
+import { API_BASE_URL } from '../config';
 
 const AdminLogin = () => {
   const [credentials, setCredentials] = useState({ email: '', password: '' });
@@ -18,7 +19,8 @@ const AdminLogin = () => {
     setError('');
 
     try {
-      const response = await fetch('http://localhost:5000/api/auth/admin-login', {
+      const response = await fetch(`${API_BASE_URL}/auth/admin-login`, {
+
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(credentials)

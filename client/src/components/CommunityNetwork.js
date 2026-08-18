@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import { API_BASE_URL } from '../config';
+
 
 const CommunityNetwork = ({ isDark, onBack }) => {
   const [nearbyUsers, setNearbyUsers] = useState([]);
@@ -22,7 +24,8 @@ const CommunityNetwork = ({ isDark, onBack }) => {
         
         try {
           // Try API call
-          const response = await fetch('http://localhost:5000/api/community/nearby-users', {
+          const response = await fetch(`${API_BASE_URL}/community/nearby-users`, {
+
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -73,7 +76,8 @@ const CommunityNetwork = ({ isDark, onBack }) => {
       
       try {
         // Try API call
-        const response = await fetch('http://localhost:5000/api/community/safety-reports', {
+        const response = await fetch(`${API_BASE_URL}/community/safety-reports`, {
+
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('token')}`
           }
@@ -129,7 +133,8 @@ const CommunityNetwork = ({ isDark, onBack }) => {
         
         try {
           // Try API first
-          const response = await fetch('http://localhost:3001/api/community/safety-reports', {
+          const response = await fetch(`${API_BASE_URL}/community/safety-reports`, {
+
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -213,7 +218,8 @@ const CommunityNetwork = ({ isDark, onBack }) => {
           };
           
           // Send to API
-          const response = await fetch('http://localhost:5000/api/community/emergency-alert', {
+          const response = await fetch(`${API_BASE_URL}/community/emergency-alert`, {
+
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',

@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
+import { API_BASE_URL } from '../config';
+
 import NivraLogo from '../components/NivraLogo.jsx';
 import { useNotifications } from '../hooks/useNotifications';
 import { useRealtimeAlerts } from '../hooks/useRealtimeAlerts';
@@ -498,7 +500,8 @@ const Dashboard = () => {
       // SMS to emergency contacts only
       if (contacts.length > 0) {
         if (isOnline) {
-          const response = await fetch('http://localhost:3001/api/emergency/send-sms', {
+          const response = await fetch(`${API_BASE_URL}/emergency/send-sms`, {
+
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -682,7 +685,8 @@ const Dashboard = () => {
       
       // Send SMS alerts via backend
       if (isOnline) {
-        await fetch('http://localhost:3001/api/emergency/send-sms', {
+        await fetch(`${API_BASE_URL}/emergency/send-sms`, {
+
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -777,7 +781,8 @@ const Dashboard = () => {
     
     // Send to all contacts via backend API
     try {
-      const response = await fetch('http://localhost:3001/api/emergency/send-sms', {
+      const response = await fetch(`${API_BASE_URL}/emergency/send-sms`, {
+
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -932,7 +937,8 @@ const Dashboard = () => {
       if (offlineAlerts.length > 0) {
         offlineAlerts.forEach(async (alert) => {
           try {
-            await fetch('http://localhost:3001/api/emergency/alert', {
+            await fetch(`${API_BASE_URL}/emergency/alert`, {
+
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
@@ -2246,7 +2252,8 @@ const Dashboard = () => {
                       try {
                         console.log('Sending automatic SMS via backend...');
                         
-                        const response = await fetch('http://localhost:3001/api/emergency/send-sms', {
+                        const response = await fetch(`${API_BASE_URL}/emergency/send-sms`, {
+
                           method: 'POST',
                           headers: {
                             'Content-Type': 'application/json',

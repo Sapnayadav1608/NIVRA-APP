@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import NivraLogo from '../components/NivraLogo.jsx';
+import { API_BASE_URL } from '../config';
 
 const Register = () => {
   const [showPassword, setShowPassword] = useState(false);
@@ -29,7 +30,8 @@ const Register = () => {
     }
     
     try {
-      const response = await fetch('http://localhost:5000/api/auth/register', {
+      const response = await fetch(`${API_BASE_URL}/auth/register`, {
+
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
