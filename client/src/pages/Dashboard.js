@@ -2300,10 +2300,9 @@ const Dashboard = () => {
                   cursor: 'pointer',
                   transition: 'transform 0.2s'
                 }}
-                onMouseDown={(e) => e.target.style.transform = 'scale(0.9)'}
-                onMouseUp={(e) => e.target.style.transform = 'scale(1)'}
                 title={sosProgress > 0 ? `Hold... ${Math.round(sosProgress)}%` : 'Emergency SOS'}
               >
+
                 SOS
               </button>
             </div>
